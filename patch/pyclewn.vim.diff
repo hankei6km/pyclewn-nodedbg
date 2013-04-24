@@ -1,0 +1,23 @@
+diff --git a/pyclewn.vim b/pyclewn.vim
+index 9ec9e25..1ac7b78 100644
+--- a/pyclewn.vim
++++ b/pyclewn.vim
+@@ -151,8 +151,17 @@ function pyclewn#StartClewn(...)
+             if a:0 > 1
+                 let l:args .= " --args \"" . join(a:000[1:], ' ') . "\""
+             endif
++        elseif a:1 == "nodedbg"
++            if a:0 == 2 && filereadable(a:2) == 0
++                call s:error("File '" . a:2 . "' is not readable.")
++                return
++            endif
++            let l:args .= " --nodedbg"
++            if a:0 > 1
++                let l:args .= " --args \"" . join(a:000[1:], ' ') . "\""
++            endif
+         else
+-            call s:error("Invalid optional first argument: must be 'pdb'.")
++            call s:error("Invalid optional first argument: must be 'pdb'/'nodedbg'.")
+             return
+         endif
+     endif

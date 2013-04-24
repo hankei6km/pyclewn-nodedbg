@@ -1,0 +1,41 @@
+diff --git a/vim.py b/vim.py
+index 5c35287..bb3cc94 100644
+--- a/vim.py
++++ b/vim.py
+@@ -39,7 +39,7 @@ import threading
+ import atexit
+ 
+ from .__init__ import *
+-from . import (misc, gdb, simple, netbeans, evtloop)
++from . import (misc, gdb, simple, netbeans, evtloop, nodedbg)
+ from . import pydb
+ if os.name == 'nt':
+     from .nt import hide_console as daemonize
+@@ -345,7 +345,7 @@ class Vim:
+                 'echo v:version > 702 || v:version == 702 && has("patch253")',
+                 'echo v:version > 702 || v:version == 702 && has("patch334")',
+                 'echo v:version',
+-                'runtime plugin/pyclewn.vim',
++                'runtime bundlep/pyclewn/plugin/pyclewn.vim',
+                 'if exists("g:pyclewn_version")'
+                     ' | echo g:pyclewn_version'
+                     ' | endif',
+@@ -526,6 +526,9 @@ class Vim:
+                 type='string', metavar='PARAM_LIST', default='',
+                 help='select the gdb debugger (the default)'
+                      ', with a mandatory, possibly empty, PARAM_LIST')
++        parser.add_option('--nodedbg',
++                action="store_true", default=False,
++                help='select the node.js debugger')
+         parser.add_option('-d', '--daemon',
+                 action="store_true", default=False,
+                 help='run as a daemon (default \'%default\')')
+@@ -590,6 +593,8 @@ class Vim:
+             self.clazz = simple.Simple
+         elif self.options.pdb:
+             self.clazz = pydb.Pdb
++        elif self.options.nodedbg:
++            self.clazz = nodedbg.NodeDbg
+         else:
+             self.clazz = gdb.Gdb
+ 
