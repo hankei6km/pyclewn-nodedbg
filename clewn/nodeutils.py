@@ -65,7 +65,7 @@ class BreakPoints():
         return str(lnum) + ':' + name
 
     def _get_name_lnum_from_key(self, key):
-        name, lnum = key.split(':', 2)
+        lnum, name = key.split(':', 2)
         return name,  lnum
 
     def add(self, bp_id, name, lnum):
@@ -82,6 +82,36 @@ class BreakPoints():
 
     def remove_all(self):
         self.bp_dict = {}
+        return
+
+    def get_standby_bps(self, scripts):
+        """ standby 状態のブレイクポイントで、ロード済スクリプトが対象のもの """
+        ret = []
+        for k, v in self.bp_dict.items():
+            if 'standby' in v:
+                name, lnum = self._get_name_lnum_from_key(k)
+                if scripts.exist(name):
+                    ret.append({'name': name, 'lnum':lnum, 'bp_id': v['bp_id']})
+        return ret
+
+
+    def set_standby(self, name, lnum):
+        key = self._get_key(name, lnum)
+        if key in self.bp_dict:
+            self.bp_dict[key]['standby'] = True
+        return
+
+    def clear_standby(self, name, lnum):
+        key = self._get_key(name, lnum)
+        if key in self.bp_dict:
+            if 'standby' in self.bp_dict[key]:
+                del self.bp_dict[key]['standby']
+        return
+
+    def standby_all(self):
+        for k, v in self.bp_dict.items():
+            name, lnum = self._get_name_lnum_from_key(k)
+            self.set_standby(name, lnum)
         return
 
     def get_bp_id(self, name, lnum):
@@ -116,7 +146,7 @@ class Scripts():
         return
 
     def exist(self, name):
-        if self.scripts_dict[name] is not None:
+        if name in self.scripts_dict:
             return True
         else:
             return False

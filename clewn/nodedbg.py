@@ -41,6 +41,11 @@ Unused = error
 Unused = warning
 Unused = debug
 
+# ブレイクポイントの管理
+# Debugger クラスはデバッグ対象が起動するマイにインスタンスが作成されるので、
+# グローバルにした(んだけどいいのか?)
+bps = BreakPoints()
+
 # list of key mappings, used to build the .pyclewn_keys.simple file
 #     key : (mapping, comment)
 MAPKEYS = {
@@ -104,7 +109,12 @@ class NodeTarget(threading.Thread):
 
     def add_bp(self, bp_id, name, lnum):
         """Add breakpoint."""
-        self._client.dbg_setbp(name, lnum)
+        k = name + ':' + str(lnum)
+        if k in self.bp_dict:
+            pass
+        else:
+            self.bp_dict[k] = -1 # 重複しての追加がないようにダミーのキーを登録
+            self._client.dbg_setbp(name, lnum)
         return True
 
     def delete_bp(self, name, lnum):
@@ -257,8 +267,8 @@ class NodeDbg(debugger.Debugger):
         self.cmds.update(NODEDBG_CMDS)
         self.mapkeys.update(MAPKEYS)
         self.bp_id = 0
-        self.bps = BreakPoints()
         self._bp_resp = {}
+        self._bpgo_que =queue.Queue() 
         self._scripts = Scripts()
         self.inferior = None
 
@@ -271,6 +281,7 @@ class NodeDbg(debugger.Debugger):
         if self.inferior is None:
             self.inferior = NodeTarget(self.options.daemon)
             self.inferior.start()
+            self.inferior.scripts()
             self.timer(self.myjob, debugger.LOOP_TIMEOUT)
 
     def close(self):
@@ -285,7 +296,7 @@ class NodeDbg(debugger.Debugger):
     def remove_all(self):
         debugger.Debugger.remove_all(self)
         self.bp_id = 0
-        self.bps.remove_all()
+        # bps.remove_all()
         self._bp_resp = {}
 
     def move_frame(self, show):
@@ -317,11 +328,12 @@ class NodeDbg(debugger.Debugger):
                     self.print_prompt()
                     self.move_frame(False)
                     self.inferior = None
+                    bps.standby_all()
                     self.remove_all()
                     self.closed = True
                 elif item['type'] == 'setbreakpoint':
                     self.add_bp(item['bp_id'], item['name'], item['lnum'])
-                    self.bps.add(item['bp_id'], item['name'], str(item['lnum']))
+                    bps.add(item['bp_id'], item['name'], str(item['lnum']))
                     self.console_print('Breakpoint %d at file %s, line %d.\n' % \
                             (item['bp_id'], item['name'], item['lnum']))
                 elif item['type'] == 'break':
@@ -332,6 +344,17 @@ class NodeDbg(debugger.Debugger):
                     self.print_prompt()
                 elif item['type'] == 'scripts':
                     self._scripts.set_scripts(item['body'])
+                    bplist = bps.get_standby_bps(self._scripts)
+                    if len(bplist) > 0:
+                        for bp in bplist:
+                            #self.delete_bp(bp['bp_id'])
+                            self.inferior.add_bp(bp['bp_id'], bp['name'], bp['lnum'])
+                    else:
+                        while not self._bpgo_que.empty():
+                            fn = self._bpgo_que.get()
+                            fn()
+                            self._bpgo_que.task_done()
+
 
                 bp_que.task_done()
 
@@ -421,9 +444,9 @@ class NodeDbg(debugger.Debugger):
 
         name, lnum = debugger.name_lnum(args)
         if name:
-            bp_id = self.bps.get_bp_id(name, lnum)
+            bp_id = bps.get_bp_id(name, lnum)
             if bp_id is not None:
-                self.bps.remove(name, lnum)
+                bps.remove(name, lnum)
                 self.delete_bp(bp_id)
                 self.inferior.delete_bp(name, lnum)
                 result = 'Clear Breakpoint %d at file %s, line %d.\n' % \
@@ -441,7 +464,7 @@ class NodeDbg(debugger.Debugger):
         # accept only one argument, for now
         if len(args) == 1:
             result = '"%s" not found.\n' % args[0]
-            name, lnum = self.bps.get_name_lnum(args[0])
+            name, lnum = bps.get_name_lnum(args[0])
             if name is not None:
                 self.update_bp(args[0], not enable)
                 self.inferior.update_bp(args[0], not enable)
@@ -494,8 +517,10 @@ class NodeDbg(debugger.Debugger):
         """Continue the program being debugged, also used to start the program."""
         unused = args
         assert self.inferior is not None
-        if not self.inferior.run_continue():
-            self.console_print('The inferior progam is running.\n')
+        #if not self.inferior.run_continue():
+        #    self.console_print('The inferior progam is running.\n')
+        self._bpgo_que.put(self.inferior.run_continue)
+        self.inferior.scripts()
         self.print_prompt()
         self.move_frame(False)
 
