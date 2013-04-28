@@ -57,3 +57,45 @@ def obj_to_print(data):
         ret = data['body']['text']
     return ret
 
+class BreakPoints():
+    def __init__(self):
+        self.bp_dict = {}
+
+    def _get_key(self, name, lnum):
+        return str(lnum) + ':' + name
+
+    def _get_name_lnum_from_key(self, key):
+        name, lnum = key.split(':', 2)
+        return name,  lnum
+
+    def add(self, bp_id, name, lnum):
+        self.bp_dict[self._get_key(name, lnum)] = {'bp_id': bp_id}
+        return
+
+    def remove(self, bp_id):
+        name, lnum = self.get_name_lnum(bp_id)
+        if name is not None:
+            del self.bp_dict[self._get_key(name, lnum)]
+
+    def remove(self, name, lnum):
+        del self.bp_dict[self._get_key(name, lnum)]
+
+    def remove_all(self):
+        self.bp_dict = {}
+        return
+
+    def get_bp_id(self, name, lnum):
+        return self.bp_dict[self._get_key(name, lnum)]['bp_id']
+
+    def get_name_lnum(self, bp_id):
+        """ bp_id から name と lnum を取得 """
+        key = None
+        for k, v in self.bp_dict.items():
+            if str(v['bp_id']) == str(bp_id):
+                key = k
+                break
+        if key is not None:
+            return self._get_name_lnum_from_key(key)
+        else:
+            return None, None
+    

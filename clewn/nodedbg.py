@@ -32,7 +32,7 @@ import queue
 from . import (misc, debugger)
 
 from .nodeclient import NodeClient
-from .nodeutils import obj_to_print
+from .nodeutils import (obj_to_print, BreakPoints)
 
 # set the logging methods
 (critical, error, warning, info, debug) = misc.logmethods('nodedbg')
@@ -116,11 +116,9 @@ class NodeTarget(threading.Thread):
             self._client.dbg_clearbp(bp_id)
         return True
 
-    def update_bp(self, k, enabled):
+    def update_bp(self, bp_id, enabled):
         """Update breakpoint."""
-        if k in self.bp_dict:
-            bp_id = self.bp_dict[k]
-            self._client.dbg_changebp(bp_id, not enabled)
+        self._client.dbg_changebp(bp_id, not enabled)
         return True
 
     def run_continue(self):
@@ -249,7 +247,7 @@ class NodeDbg(debugger.Debugger):
         self.cmds.update(NODEDBG_CMDS)
         self.mapkeys.update(MAPKEYS)
         self.bp_id = 0
-        self.bp_dict = {}
+        self.bps = BreakPoints()
         self._bp_resp = {}
         self.inferior = None
 
@@ -276,7 +274,7 @@ class NodeDbg(debugger.Debugger):
     def remove_all(self):
         debugger.Debugger.remove_all(self)
         self.bp_id = 0
-        self.bp_dict = {}
+        self.bps.remove_all()
         self._bp_resp = {}
 
     def move_frame(self, show):
@@ -312,7 +310,7 @@ class NodeDbg(debugger.Debugger):
                     self.closed = True
                 elif item['type'] == 'setbreakpoint':
                     self.add_bp(item['bp_id'], item['name'], item['lnum'])
-                    self.bp_dict[item['name'] + ':' + str(item['lnum'])] =item['bp_id'] 
+                    self.bps.add(item['bp_id'], item['name'], str(item['lnum']))
                     self.console_print('Breakpoint %d at file %s, line %d.\n' % \
                             (item['bp_id'], item['name'], item['lnum']))
                 elif item['type'] == 'break':
@@ -409,15 +407,14 @@ class NodeDbg(debugger.Debugger):
 
         name, lnum = debugger.name_lnum(args)
         if name:
-            k = name + ':' + str(lnum)
-            if k in self.bp_dict:
-                bp_id = self.bp_dict[k]
-                del self.bp_dict[name + ':' + str(lnum)]
+            bp_id = self.bps.get_bp_id(name, lnum)
+            if bp_id is not None:
+                self.bps.remove(name, lnum)
                 self.delete_bp(bp_id)
                 self.inferior.delete_bp(name, lnum)
                 result = 'Clear Breakpoint %d at file %s, line %d.\n' % \
                                                 (bp_id, name, lnum)
-            
+
         self.console_print(result)
         self.print_prompt()
 
@@ -430,11 +427,11 @@ class NodeDbg(debugger.Debugger):
         # accept only one argument, for now
         if len(args) == 1:
             result = '"%s" not found.\n' % args[0]
-            for k, v in self.bp_dict.items():
-                if str(v) == args[0]:
-                    self.update_bp(k, not enable)
-                    self.inferior.update_bp(k, not enable)
-                    result = ''
+            name, lnum = self.bps.get_name_lnum(args[0])
+            if name is not None:
+                self.update_bp(args[0], not enable)
+                self.inferior.update_bp(args[0], not enable)
+                result = ''
 
         self.console_print(result)
         self.print_prompt()
