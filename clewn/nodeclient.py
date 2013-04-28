@@ -207,3 +207,6 @@ class NodeClient(asynchat.async_chat):
                 }
         self.send_req(req)
         return
+
+    def dbg_scripts(self):
+        self.send_req({ 'command': 'scripts' })

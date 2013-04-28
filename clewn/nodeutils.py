@@ -99,3 +99,24 @@ class BreakPoints():
         else:
             return None, None
     
+class Scripts():
+    """ ロード済スクリプトの一覧 """
+    def __init__(self):
+        self.scripts_dict = {}
+
+    def remove_all(self):
+        self.scripts_dict = {}
+        return
+
+    def set_scripts(self, scripts_resp_body):
+        self.remove_all()
+        for i in scripts_resp_body:
+            if 'name' in i:
+                self.scripts_dict[i['name']] ={'type': i['type']}
+        return
+
+    def exist(self, name):
+        if self.scripts_dict[name] is not None:
+            return True
+        else:
+            return False

@@ -32,7 +32,7 @@ import queue
 from . import (misc, debugger)
 
 from .nodeclient import NodeClient
-from .nodeutils import (obj_to_print, BreakPoints)
+from .nodeutils import (obj_to_print, BreakPoints, Scripts)
 
 # set the logging methods
 (critical, error, warning, info, debug) = misc.logmethods('nodedbg')
@@ -160,6 +160,11 @@ class NodeTarget(threading.Thread):
         self._client.dbg_evaluate(args)
         return True
 
+    def scripts(self):
+        """get loaded scripts list."""
+        self._client.dbg_scripts()
+        return True
+
     def __repr__(self):
         """Return the target representation."""
         return "Target: {'running': %s, 'closed': %s}" % (self.running,
@@ -231,6 +236,11 @@ class NodeTarget(threading.Thread):
                 else:
                     item['text'] = data['message']
                 self.bp_que.put(item)
+            elif data['command'] == 'scripts':
+                item = {}
+                item['type'] = 'scripts'
+                item['body'] = data['body']
+                self.bp_que.put(item)
         return
 
 class NodeDbg(debugger.Debugger):
@@ -249,6 +259,7 @@ class NodeDbg(debugger.Debugger):
         self.bp_id = 0
         self.bps = BreakPoints()
         self._bp_resp = {}
+        self._scripts = Scripts()
         self.inferior = None
 
     def start(self):
@@ -319,10 +330,13 @@ class NodeDbg(debugger.Debugger):
                 elif item['type'] == 'print':
                     self.console_print(item['text'] + '\n')
                     self.print_prompt()
+                elif item['type'] == 'scripts':
+                    self._scripts.set_scripts(item['body'])
 
                 bp_que.task_done()
 
         if self.closed == False:
+            self.inferior.scripts()
             self.timer(self.myjob, debugger.LOOP_TIMEOUT)
 
 
