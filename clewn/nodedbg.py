@@ -424,10 +424,13 @@ class NodeDbg(debugger.Debugger):
         if name:
             self.bp_id += 1
             # 実際の位置はセットしてみないとわからないので、
+            # ここでは追加の設定のみ行い、
             # アノテーションはレスポンスを受け取ったときにセットする.
-            # self.bp_dict[name + ':' + str(lnum)] = self.bp_id
-            # self.add_bp(self.bp_id, name, lnum)
-            self.inferior.add_bp(self.bp_id, name, lnum)
+            # TODO: ロードされてないスクリプトの場合は、
+            # 実際にロードされるまでレスポンスがないので、
+            # アノテーションは表示されないので、なにか対応を.
+            bps.add_sandby(self.bp_id, name, lnum)
+            self.inferior.scripts()
         else:
             self.console_print('Invalid arguments.\n')
 
