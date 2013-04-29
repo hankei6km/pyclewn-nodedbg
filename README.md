@@ -42,6 +42,10 @@ Pyclewn は **Python3 用** が必要ですので注意してください.
 
     :Cmapkeys
 
+Node.js の debugger へ再接続(このときブレイクポイントも復元).
+
+    :Cattach
+
 その他の有効なコマンドの表示.
 
     :Chelp
@@ -54,11 +58,10 @@ nodedbg からNode.jsのスクリプトを直接起動することには対応�
 
 `Cbreak foo.js:10` のような breakpoint 追加コマンドの実行時に、
 対象のスクリプトファイル (`foo.js`) が Node.js 側で読み込まれていない場合、
-breakpoint の追加は失敗します.
-
-設定された breakpoint は (ターゲットが終了するなどで)、
-Node.js との接続が切れるとすべて clear されます.
-接続が回復しても、現状では再設定されません.
+breakpoint の追加は追加されますが、実際にファイルが読み込まれるまでは、
+画面に反映されません.
+また、ファイル読み込みから breakpoint の設定までに時間差があるので、
+スクリプトの内容によっては停止しないこともあります.
 
 キーボードから `<C-S>` (`Cstep` コマンド)を連続して実行したりすると、
 以下のようなエラーとなるかもしれません.
@@ -86,6 +89,13 @@ Node.js の `--debug` オプションや、v8 debugger protocolの扱いにつ�
 わりとお手軽に、Vim 上での Node.js 用 Debugger UI が作成できました.
 
 ありがとうございました.
+
+## History
+
+### 2013.04.29
+
+* Node.js の debugger への再接続時に、 breakpoint を復元するようにした.
+* ロード前のスクリプトファイルへの breakpoint 設定に部分的に対応.
 
 ## License
 
