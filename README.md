@@ -95,6 +95,11 @@ Node.js の `--debug` オプションや、v8 debugger protocolの扱いにつ�
 
 ## History
 
+### 2013.05.06
+
+* continue コマンドが実行されないときがあるのを修正.
+* ブレイクポイントが設定されていない位置で clear を実行するとエラーになるのを修正.
+
 ### 2013.04.29
 
 * Node.js の debugger への再接続時に、 breakpoint を復元するようにした.
