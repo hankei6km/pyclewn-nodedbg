@@ -347,7 +347,7 @@ class NodeDbg(debugger.Debugger):
                     bplist = bps.get_standby_bps(self._scripts)
                     if len(bplist) > 0:
                         for bp in bplist:
-                            #self.delete_bp(bp['bp_id'])
+                            bps.clear_standby(bp['name'], bp['lnum'])
                             self.inferior.add_bp(bp['bp_id'], bp['name'], bp['lnum'])
                     else:
                         while not self._bpgo_que.empty():
