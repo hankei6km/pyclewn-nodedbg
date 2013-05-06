@@ -120,7 +120,11 @@ class BreakPoints():
         return
 
     def get_bp_id(self, name, lnum):
-        return self.bp_dict[self._get_key(name, lnum)]['bp_id']
+        ret = None
+        key = self._get_key(name, lnum)
+        if key in self.bp_dict:
+            ret = self.bp_dict[key]['bp_id']
+        return ret
 
     def get_name_lnum(self, bp_id):
         """ bp_id から name と lnum を取得 """
