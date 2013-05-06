@@ -429,7 +429,7 @@ class NodeDbg(debugger.Debugger):
             # TODO: ロードされてないスクリプトの場合は、
             # 実際にロードされるまでレスポンスがないので、
             # アノテーションは表示されないので、なにか対応を.
-            bps.add_sandby(self.bp_id, name, lnum)
+            bps.add_standby(self.bp_id, name, lnum)
             self.inferior.scripts()
         else:
             self.console_print('Invalid arguments.\n')

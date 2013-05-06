@@ -72,7 +72,7 @@ class BreakPoints():
         self.bp_dict[self._get_key(name, lnum)] = {'bp_id': bp_id}
         return
 
-    def add_sandby(self, bp_id, name, lnum):
+    def add_standby(self, bp_id, name, lnum):
         self.add(bp_id, name, lnum)
         self.set_standby(name, lnum)
         return
