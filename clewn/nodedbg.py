@@ -360,7 +360,7 @@ class NodeDbg(debugger.Debugger):
 
         if self.closed == False:
             self.inferior.scripts()
-            self.timer(self.myjob, debugger.LOOP_TIMEOUT)
+            self.timer(self.myjob, debugger.LOOP_TIMEOUT + 0.1)
 
 
     #-----------------------------------------------------------------------
