@@ -69,13 +69,6 @@ Node.js の debugger がブレイクポイントの位置を変更すること�
 ファイル末尾を超えることがある)、
 ブレイクポイントや停止時の位置が表示されない.
 
-キーボードから `<C-S>` (`Cstep` コマンド)を連続して実行したりすると、
-以下のようなエラーとなるかもしれません.
-
-    "deque index out of range"
-    source line: "del self.producer_fifo[0]"
-    at /usr/lib/python3.3/asynchat.py:254
-
 Node.js の debugger へ接続できないときに、
 適切なエラーメッセージが表示されません.
 (`Node.js debugger connection closed.` とは表示されます).
@@ -100,6 +93,11 @@ Node.js の `--debug` オプションや、v8 debugger protocolの扱いにつ�
 ありがとうございました.
 
 ## History
+
+### 2013.05.18
+
+* デバッグ対象のプロセスがリクエストを受け付けなくなることへの対応.
+* "deque index out of range" で切断されることへの対応(たぶん).
 
 ### 2013.05.06
 
