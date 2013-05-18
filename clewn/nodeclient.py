@@ -13,6 +13,7 @@
 
 import asyncore
 import asynchat
+import threading
 import socket
 import json
 
@@ -27,6 +28,7 @@ class NodeClient(asynchat.async_chat):
     """Node.js の debugger を非同期に制御するクラス."""
     def __init__(self, handle_resp):
         asynchat.async_chat.__init__(self)
+        self.sending = threading.Lock()
         self.ibuffer = []
 
         self._handle_resp = handle_resp
@@ -90,17 +92,13 @@ class NodeClient(asynchat.async_chat):
     def send_req(self, req):
         """debugger へ request を送信する."""
 
+        self.sending.acquire()
         req['type'] = 'request'
         msg = json.dumps(req).encode()
         cont = b'Content-Length:' + str(len(msg)).encode() + b"\r\n\r\n" + msg
 
-        # TODO: slepp は下記のエラーへの暫定対応なので、まともな方法を調べる.
-        # ----
-        # "deque index out of range"
-        # source line: "del self.producer_fifo[0]"
-        # at /usr/lib/python3.3/asynchat.py:254
-        time.sleep(0.05)
-        self.push(cont)
+        self.send(cont)
+        self.sending.release()
         return
 
     #-----------------------------------------------------------------------
