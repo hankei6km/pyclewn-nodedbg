@@ -31,8 +31,13 @@ import queue
 
 from . import (misc, debugger)
 
+try:
+    from collections import OrderedDict
+except ImportError:
+    from .misc import OrderedDict
+
 from .nodeclient import NodeClient
-from .nodeutils import (obj_to_print, BreakPoints, Scripts)
+from .nodeutils import (obj_to_print, obj_to_properties, BreakPoints, Scripts)
 
 # set the logging methods
 (critical, error, warning, info, debug) = misc.logmethods('nodedbg')
@@ -60,6 +65,8 @@ MAPKEYS = {
     'S-C': ('continue',),
     'S-Q': ('quit',),
     'S-S': ('step',),
+    'S-X': ('foldvar ${lnum}',
+                'expand/collapse a watched variable'),
 }
 
 # list of the nodedbg commands mapped to vim user commands C<command>
@@ -175,6 +182,20 @@ class NodeTarget(threading.Thread):
         self._client.dbg_scripts()
         return True
 
+    def lookup(self, handles):
+        self._client.lookup(handles)
+        return True
+
+    def frame(self):
+        """get selected frame."""
+        self._client.dbg_frame()
+        return True
+
+    def scope(self, scopeNumber):
+        """get scope on selected frame."""
+        self._client.dbg_scope(scopeNumber)
+        return True
+
     def __repr__(self):
         """Return the target representation."""
         return "Target: {'running': %s, 'closed': %s}" % (self.running,
@@ -232,6 +253,7 @@ class NodeTarget(threading.Thread):
                 # target 側でもid を保持しておく.
                 self.bp_dict[name + ':' + str(lnum)] = bp_id
             elif data['command'] == 'backtrace':
+                print(data['body']['frames'][0])
                 item = {}
                 item['type'] = 'print'
                 item['text'] = '\n'
@@ -251,7 +273,316 @@ class NodeTarget(threading.Thread):
                 item['type'] = 'scripts'
                 item['body'] = data['body']
                 self.bp_que.put(item)
+            elif data['command'] == 'lookup':
+                for body in data['body']:
+                    item = {}
+                    item['type'] = 'properties'
+                    item['handle'] =data['body'][body]['handle']
+                    item['properties'] = obj_to_properties(data,
+                            data['body'][body], item['handle'])
+                    self.bp_que.put(item)
+            elif data['command'] == 'frame':
+                item = {}
+                item['type'] = 'frame'
+                item['scopes'] = data['body']['scopes']
+                self.bp_que.put(item)
+                for scope in data['body']['scopes']:
+                    self.scope(scope['index'])
+            elif data['command'] == 'scope':
+                item = {}
+                item['type'] = 'scope'
+                item['body'] = data['body']
+                self.bp_que.put(item)
         return
+
+class NodeVar:
+    """ Node var class."""
+    def __init__(self):
+        """Constructor."""
+        self.scopes = []
+        self.scope_lookup = {}
+
+        self.prev_scopes = []
+
+    def scopes_equal(self, scopes):
+        """ 指定された scopes が、保持している scopes と同じか?
+        ただし、ここでは厳密には区別できない(する方法が不明)ので、
+        deep equal ではない. """
+
+        ret = True
+        if len(self.scopes) != len(scopes):
+            ret = False
+        else:
+            for scope in scopes:
+                if self.scopes[scope['index']]['type'] != scope['type']:
+                    ret = False
+
+        return ret
+
+    def set_scopes(self, scopes):
+
+        if self.scopes_equal(scopes):
+            # 前回と同じ scopes の可能性が高いので、
+            # 退避しておく.
+            self.prev_scopes = self.scopes
+        else:
+            # 前回と異なる scopes の可能性が高いので、
+            # 退避していた情報は破棄.
+            self.prev_scopes = []
+
+        self.scopes = [0] * len(scopes);
+        for scope in scopes:
+            lbl = ''
+            expanded = False
+            if scope['type'] == 0:
+                lbl = 'Global'
+            elif scope['type'] == 1:
+                lbl = 'Local'
+                expanded = True
+            elif scope['type'] == 2:
+                lbl = 'With'
+            elif scope['type'] == 3:
+                lbl = 'Closure'
+                expanded = True
+            elif scope['type'] == 4:
+                lbl = 'Catch'
+            item = {
+                    'type': scope['type'],
+                    'lbl': lbl,
+                    'expanded': expanded,
+                    'standby': True,
+                    'properties': []
+                    }
+            self.scopes[scope['index']] = item
+
+        if len(self.prev_scopes):
+            # 退避しておいた情報から、一部の情報を復元する.
+            index = 0
+            for scope in self.scopes:
+                scope['expanded'] = self.prev_scopes[index]['expanded']
+                index = index + 1
+        return
+
+    def move_properties_array_to_ordered_dict(self, array_p, dict_p):
+
+        for prop in array_p:
+            item = {'name': prop['name']}
+            if not ('value' in prop['value']):
+                item['expanded'] = False
+                item['properties'] = []
+            item['value'] = prop['value']
+
+            dict_p[item['name']] = item
+
+        return
+
+    def properties_equal(self, p1, p2):
+        """ properties の比較.
+        個数と、それぞれの name と value/type で比較."""
+
+        ret = True
+
+        if len(p1) != len(p2):
+            ret = False
+        else:
+            for p in p1:
+                if not (p in p2):
+                    ret = False
+                else:
+                   if p1[p]['value']['type'] != p2[p]['value']['type']:
+                       ret = False
+
+        return ret
+
+    def set_scope_props(self, index, properties):
+        self.scopes[index]['properties'] = OrderedDict();
+
+        self.move_properties_array_to_ordered_dict(properties, \
+                self.scopes[index]['properties']
+                )
+
+        if len(self.prev_scopes) > index:
+            if self.properties_equal( \
+                    self.scopes[index]['properties'], \
+                    self.prev_scopes[index]['properties']
+                    ):
+                # 前回と同じ properties(scope) の可能性が高いので、
+                # 部分的に情報を復元する.
+                # なお、復元された情報は value が古いままなので、
+                # このメソッドの呼び出し元で、
+                # get_lookup_list メソッドから lookup すべき handle 一覧を取得し
+                # 再度 lookup を行う必要がある.
+                for p in self.scopes[index]['properties']:
+                    cur = self.scopes[index]['properties'][p]
+                    prev = self.prev_scopes[index]['properties'][p]
+                    if 'expanded' in prev:
+                        cur['expanded'] = prev['expanded']
+                        cur['properties'] = prev['properties']
+
+        self.scopes[index]['standby'] = False;
+
+        return
+
+    def get_lookup_list(self):
+        """Objectの展開などで lookup していた handle のリスト取得."""
+        ret = []
+
+        # ref が変わっているので、index と name から再取得.
+
+        prev_lookup = self.scope_lookup
+        self.scope_lookup = {}
+        for handle in prev_lookup:
+            tgt = self.get_tgt_item_from_names( \
+                    prev_lookup[handle]['index'], \
+                    prev_lookup[handle]['name'] \
+                    )
+            if 'value' in tgt:
+                self.scope_lookup[tgt['value']['ref']] = {\
+                        'index': prev_lookup[handle]['index'], \
+                        'name': prev_lookup[handle]['name']
+                        }
+            ret.append(tgt['value']['ref'])
+
+        return ret
+
+    def set_properties_from_handle(self, handle, properties):
+
+        tgt = self.get_tgt_item_from_names( \
+                self.scope_lookup[handle]['index'],\
+                self.scope_lookup[handle]['name']
+                )
+        tgt['properties'] = OrderedDict()
+
+        self.move_properties_array_to_ordered_dict(properties, \
+                tgt['properties']
+                )
+
+        return
+
+    def is_standby(self):
+        ret = False
+        for scope in self.scopes:
+            if scope['standby']:
+                ret = True
+
+        return ret
+
+    def get_tgl_lbl(self, item):
+        ret = '   '
+        if 'expanded' in item:
+            if item['expanded']:
+                ret = '[-]'
+            else:
+                ret = '[+]'
+        
+        return ret
+
+    def get_value_lbl(self, item):
+        ret = ''
+
+        if 'value' in item['value']:
+            ret = item['value']['value']
+        else:
+            if 'className' in item['value']:
+                ret = '<%s>' % (item['value']['className'])
+            else:
+                ret = '<%s>' % (item['value']['type'])
+
+        return ret
+
+    def scope_var_str(self, properties, depth):
+        varstr = ''
+
+        for name in properties:
+            var = properties[name]
+            name = var['name']
+            value = self.get_value_lbl(var)
+            hilite = '-'
+            tgl_lbl = self.get_tgl_lbl(var)
+            varstr += ' ' * depth + '%s %s ={%s} %s\n' % (tgl_lbl, name, hilite, value)
+            if 'expanded' in var and var['expanded']:
+                varstr = varstr + \
+                        self.scope_var_str(var['properties'], depth + 1)
+
+        return varstr
+
+    def __str__(self):
+        varstr = ''
+
+        for scope in self.scopes:
+            tgl_lbl = self.get_tgl_lbl(scope)
+            if tgl_lbl:
+                varstr = varstr + '%s %s\n' % (tgl_lbl, scope['lbl'])
+                if scope['expanded']:
+                    varstr = varstr + self.scope_var_str(scope['properties'], 1)
+
+        return varstr
+
+    def get_tgt_item_from_names(self, index, name):
+
+        ret = self.scopes[index]
+
+        for n in name:
+            if n in ret['properties']:
+                ret = ret['properties'][n]
+            else:
+                ret = {}
+                break
+
+        return ret
+
+    def get_properties_lines(self, index, properties, pnames):
+        lines = []
+        for name in properties:
+            var = properties[name]
+            line = {
+                    'name': pnames + [var['name']],
+                    'index': index
+                    }
+            if 'expanded' in var:
+                line['expanded'] = var['expanded']
+
+            lines.append(line)
+
+            if 'expanded' in var and var['expanded']:
+                rlines = self.get_properties_lines(index, var['properties'], \
+                        line['name'])
+                lines.extend(rlines)
+
+        return lines
+
+    def foldvar(self, lnum):
+        ret = -1
+
+        lines = []
+        index = 0
+
+        for scope in self.scopes:
+            line = {
+                    'root': True,
+                    'index': index
+                    }
+            line['expanded'] = scope['expanded']
+            lines.append(line)
+            if scope['expanded']:
+                lines.extend(self.get_properties_lines(index, scope['properties'], []))
+            index = index + 1
+
+        line = lines[lnum-1]
+        if 'root' in line:
+            self.scopes[line['index']]['expanded'] = \
+                not self.scopes[line['index']]['expanded']
+        else:
+            tgt = self.get_tgt_item_from_names(line['index'], line['name'])
+            if 'expanded' in tgt:
+                tgt['expanded'] = not tgt['expanded']
+            ret = tgt['value']['ref']
+            self.scope_lookup[ret] = {
+                    'index': line['index'],
+                    'name': line['name']
+                    }
+
+        return ret
 
 class NodeDbg(debugger.Debugger):
     def __init__(self, *args):
@@ -259,7 +590,7 @@ class NodeDbg(debugger.Debugger):
         debugger.Debugger.__init__(self, *args)
         self.pyclewn_cmds.update(
             {
-                # 'dbgvar': (),
+                'dbgvar': (),
                 # 'delvar': (),
                 'sigint': (),
                 'symcompletion': (),
@@ -271,6 +602,8 @@ class NodeDbg(debugger.Debugger):
         self._bpgo_que =queue.Queue() 
         self._scripts = Scripts()
         self.inferior = None
+
+        self.varobj = NodeVar()
 
     def start(self):
         """Start the debugger."""
@@ -306,6 +639,7 @@ class NodeDbg(debugger.Debugger):
         first enabled breakpoint in the stepping buffer.
 
         """
+        self.inferior.frame();
         if show:
             script_name = self._bp_resp['name']
             if script_name is not None:
@@ -342,6 +676,19 @@ class NodeDbg(debugger.Debugger):
                 elif item['type'] == 'print':
                     self.console_print(item['text'] + '\n')
                     self.print_prompt()
+                elif item['type'] == 'properties':
+                    self.varobj.set_properties_from_handle(item['handle'], item['properties'])
+                    if self.varobj.is_standby() == False:
+                        self.update_dbgvarbuf(self.varobj.__str__, True)
+                elif item['type'] == 'frame':
+                    self.varobj.set_scopes(item['scopes'])
+                elif item['type'] == 'scope':
+                    self.varobj.set_scope_props(item['body']['index'], \
+                        item['body']['object']['properties']);
+                    if self.varobj.is_standby() == False:
+                        handles = self.varobj.get_lookup_list()
+                        self.inferior.lookup(handles)
+                        self.update_dbgvarbuf(self.varobj.__str__, True)
                 elif item['type'] == 'scripts':
                     self._scripts.set_scripts(item['body'])
                     bplist = bps.get_standby_bps(self._scripts)
@@ -383,6 +730,8 @@ class NodeDbg(debugger.Debugger):
         # console must be done before starting to handle the (clewn)_dbgvar
         # buffer when processing Cdbgvar
         # update the vim debugger variable buffer with the variables values
+        #self.inferior.frame();
+        #self.update_dbgvarbuf(self.varobj.__str__, True)
 
     def default_cmd_processing(self, cmd, args):
         """Process any command whose cmd_xxx method does not exist."""
@@ -542,6 +891,24 @@ class NodeDbg(debugger.Debugger):
         else:
             self.console_print('Invalid arguments.\n')
             self.print_prompt()
+
+    def cmd_foldvar(self, cmd, args):
+        """Collapse/expand a variable from the debugger variable buffer."""
+        unused = cmd
+        args = args.split()
+        if len(args) != 1:
+            self.console_print('Invalid arguments.')
+        else:
+            try:
+                lnum = int(args[0])
+                ref = self.varobj.foldvar(lnum)
+                if ref < 0:
+                    self.update_dbgvarbuf(self.varobj.__str__, True)
+                else:
+                    self.inferior.lookup([ref])
+            except ValueError:
+                self.console_print('Not a line number.')
+
 
     def cmd_quit(self, *args):
         """Quit the current nodedbg session."""

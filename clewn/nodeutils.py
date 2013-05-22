@@ -57,6 +57,33 @@ def obj_to_print(data):
         ret = data['body']['text']
     return ret
 
+def obj_to_properties(in_data, in_body, handle):
+    """ Node.js のオブジェクトをref含みのproperties形式へ変換."""
+
+    ret = []
+    data = in_data
+    body = in_body
+    if 'properties' in body:
+        properties = body['properties']
+        refs = data['refs']
+        for p in properties:
+            value = {}
+            for r in refs:
+                if p['ref'] == r['handle']:
+                    if 'value' in r:
+                        value['value'] = r['value']
+                    if 'className' in r:
+                        value['className'] = r['className']
+                    value['type'] = r['type']
+                    value['ref'] = r['handle']
+                    ret.append({
+                        'name': p['name'],
+                        'value': value
+                        })
+                    break
+
+    return ret
+
 class BreakPoints():
     def __init__(self):
         self.bp_dict = {}

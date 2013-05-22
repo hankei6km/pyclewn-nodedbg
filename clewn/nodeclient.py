@@ -208,3 +208,36 @@ class NodeClient(asynchat.async_chat):
 
     def dbg_scripts(self):
         self.send_req({ 'command': 'scripts' })
+        return
+
+    def lookup(self, handles):
+        req = {
+                'command': 'lookup',
+                'arguments': {
+                    'handles': handles,
+                    'includeSource': False
+                    }
+                }
+        self.send_req(req)
+        return
+
+    def dbg_frame(self):
+        req = {
+                'command': 'frame',
+                'arguments': {
+                    }
+                }
+        self.send_req(req)
+        return
+
+    def dbg_scope(self, scopeNumber, frameNumber=None):
+        req = {
+                'command': 'scope',
+                'arguments': {
+                    'number': scopeNumber,
+                    'frameNumber': frameNumber,
+                    'inlineRefs': True
+                    }
+                }
+        self.send_req(req)
+        return
