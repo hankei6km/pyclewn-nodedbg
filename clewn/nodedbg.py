@@ -451,7 +451,7 @@ class NodeVar:
                         'index': prev_lookup[handle]['index'], \
                         'name': prev_lookup[handle]['name']
                         }
-            ret.append(tgt['value']['ref'])
+                ret.append(tgt['value']['ref'])
 
         return ret
 
