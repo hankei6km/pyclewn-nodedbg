@@ -25,6 +25,7 @@
 
 import os
 import sys
+import traceback
 import threading
 import functools
 import queue
@@ -215,84 +216,93 @@ class NodeTarget(threading.Thread):
         """client(node.js の debugger) からのレスポンスを処理する.
 
         """
-        if data['type'] == 'event':
-            if data['event'] == 'break':
-                item = {}
-                item['type'] = 'break'
-                item['name'] = data['body']['script']['name'] 
-                item['lnum'] =data['body']['sourceLine'] + 1 
-                self.running = False
-                self.bp_que.put(item)
-            if data['event'] == 'exception':
-                item = {}
-                item['type'] = 'break'
-                item['name'] = data['body']['script']['name'] 
-                item['lnum'] =data['body']['sourceLine'] + 1 
-                self.running = False
-                self.bp_que.put(item)
-                item = {}
-                item['type'] = 'print'
-                item['text'] = data['body']['exception']['text']
-                self.bp_que.put(item)
-
-        elif data['type'] == 'response':
-            if data['command'] == 'disconnect':
-                item = {}
-                item['type'] = 'close'
-                self.bp_que.put(item)
-            elif data['command'] == 'setbreakpoint':
-                item = {}
-                item['type'] = 'setbreakpoint'
-                name = data['body']['script_name']
-                lnum = data['body']['actual_locations'][0]['line'] + 1 
-                bp_id = data['body']['breakpoint']
-                item['name'] = name
-                item['lnum'] = lnum
-                item['bp_id'] = bp_id
-                self.bp_que.put(item)
-                # target 側でもid を保持しておく.
-                self.bp_dict[name + ':' + str(lnum)] = bp_id
-            elif data['command'] == 'backtrace':
-                print(data['body']['frames'][0])
-                item = {}
-                item['type'] = 'print'
-                item['text'] = '\n'
-                for i in data['body']['frames']:
-                    item['text'] = item['text'] + i['text'] + '\n'
-                self.bp_que.put(item)
-            elif data['command'] == 'evaluate':
-                item = {}
-                item['type'] = 'print'
-                if data['success']:
-                    item['text'] = obj_to_print(data)
-                else:
-                    item['text'] = data['message']
-                self.bp_que.put(item)
-            elif data['command'] == 'scripts':
-                item = {}
-                item['type'] = 'scripts'
-                item['body'] = data['body']
-                self.bp_que.put(item)
-            elif data['command'] == 'lookup':
-                for body in data['body']:
+        try:
+            if data['type'] == 'event':
+                if data['event'] == 'break':
                     item = {}
-                    item['type'] = 'properties'
-                    item['handle'] =data['body'][body]['handle']
-                    item['properties'] = obj_to_properties(data,
-                            data['body'][body], item['handle'])
+                    item['type'] = 'break'
+                    item['name'] = data['body']['script']['name'] 
+                    item['lnum'] =data['body']['sourceLine'] + 1 
+                    self.running = False
                     self.bp_que.put(item)
-            elif data['command'] == 'frame':
-                item = {}
-                item['type'] = 'frame'
-                item['scopes'] = data['body']['scopes']
-                self.bp_que.put(item)
-                for scope in data['body']['scopes']:
-                    self.scope(scope['index'])
-            elif data['command'] == 'scope':
-                item = {}
-                item['type'] = 'scope'
-                item['body'] = data['body']
-                self.bp_que.put(item)
+                if data['event'] == 'exception':
+                    item = {}
+                    item['type'] = 'break'
+                    item['name'] = data['body']['script']['name'] 
+                    item['lnum'] =data['body']['sourceLine'] + 1 
+                    self.running = False
+                    self.bp_que.put(item)
+                    item = {}
+                    item['type'] = 'print'
+                    item['text'] = data['body']['exception']['text']
+                    self.bp_que.put(item)
+
+            elif data['type'] == 'response':
+                if data['command'] == 'disconnect':
+                    item = {}
+                    item['type'] = 'close'
+                    self.bp_que.put(item)
+                elif data['command'] == 'setbreakpoint':
+                    item = {}
+                    item['type'] = 'setbreakpoint'
+                    name = data['body']['script_name']
+                    lnum = data['body']['actual_locations'][0]['line'] + 1 
+                    bp_id = data['body']['breakpoint']
+                    item['name'] = name
+                    item['lnum'] = lnum
+                    item['bp_id'] = bp_id
+                    self.bp_que.put(item)
+                    # target 側でもid を保持しておく.
+                    self.bp_dict[name + ':' + str(lnum)] = bp_id
+                elif data['command'] == 'backtrace':
+                    print(data['body']['frames'][0])
+                    item = {}
+                    item['type'] = 'print'
+                    item['text'] = '\n'
+                    for i in data['body']['frames']:
+                        item['text'] = item['text'] + i['text'] + '\n'
+                    self.bp_que.put(item)
+                elif data['command'] == 'evaluate':
+                    item = {}
+                    item['type'] = 'print'
+                    if data['success']:
+                        item['text'] = obj_to_print(data)
+                    else:
+                        item['text'] = data['message']
+                    self.bp_que.put(item)
+                elif data['command'] == 'scripts':
+                    item = {}
+                    item['type'] = 'scripts'
+                    item['body'] = data['body']
+                    self.bp_que.put(item)
+                elif data['command'] == 'lookup':
+                    for body in data['body']:
+                        item = {}
+                        item['type'] = 'properties'
+                        item['handle'] =data['body'][body]['handle']
+                        item['properties'] = obj_to_properties(data,
+                                data['body'][body], item['handle'])
+                        self.bp_que.put(item)
+                elif data['command'] == 'frame':
+                    item = {}
+                    item['type'] = 'frame'
+                    item['scopes'] = data['body']['scopes']
+                    self.bp_que.put(item)
+                    for scope in data['body']['scopes']:
+                        self.scope(scope['index'])
+                elif data['command'] == 'scope':
+                    item = {}
+                    item['type'] = 'scope'
+                    item['body'] = data['body']
+                    self.bp_que.put(item)
+        except:
+            #traceback.print_tb(sys.exc_info()[2])
+            item = {}
+            item['type'] = 'print'
+            item['text'] = '\nException in nodedbg(handle_resp)\n'
+            item['text'] = item['text'] + '%s\n%s\n\n' % sys.exc_info()[:2]
+            item['text'] = item['text'] + traceback.format_exc()
+            self.bp_que.put(item)
         return
 
 class NodeVar:

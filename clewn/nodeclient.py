@@ -92,13 +92,16 @@ class NodeClient(asynchat.async_chat):
     def send_req(self, req):
         """debugger へ request を送信する."""
 
-        self.sending.acquire()
-        req['type'] = 'request'
-        msg = json.dumps(req).encode()
-        cont = b'Content-Length:' + str(len(msg)).encode() + b"\r\n\r\n" + msg
+        try:
+            self.sending.acquire()
+            req['type'] = 'request'
+            msg = json.dumps(req).encode()
+            cont = b'Content-Length:' + str(len(msg)).encode() + b"\r\n\r\n" + msg
 
-        self.send(cont)
-        self.sending.release()
+            self.send(cont)
+        finally:
+            self.sending.release()
+
         return
 
     #-----------------------------------------------------------------------
