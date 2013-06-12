@@ -276,24 +276,27 @@ class NodeTarget(threading.Thread):
                     item['body'] = data['body']
                     self.bp_que.put(item)
                 elif data['command'] == 'lookup':
-                    for body in data['body']:
-                        item = {}
-                        item['type'] = 'properties'
-                        item['handle'] =data['body'][body]['handle']
-                        item['properties'] = obj_to_properties(data,
-                                data['body'][body], item['handle'])
-                        self.bp_que.put(item)
+                    if data['success']:
+                        for body in data['body']:
+                            item = {}
+                            item['type'] = 'properties'
+                            item['handle'] =data['body'][body]['handle']
+                            item['properties'] = obj_to_properties(data,
+                                    data['body'][body], item['handle'])
+                            self.bp_que.put(item)
                 elif data['command'] == 'frame':
                     item = {}
                     item['type'] = 'frame'
-                    item['scopes'] = data['body']['scopes']
-                    self.bp_que.put(item)
-                    for scope in data['body']['scopes']:
-                        self.scope(scope['index'])
+                    if data['success']:
+                        item['scopes'] = data['body']['scopes']
+                        self.bp_que.put(item)
+                        for scope in data['body']['scopes']:
+                            self.scope(scope['index'])
                 elif data['command'] == 'scope':
                     item = {}
                     item['type'] = 'scope'
-                    item['body'] = data['body']
+                    if data['success']:
+                        item['body'] = data['body']
                     self.bp_que.put(item)
         except:
             #traceback.print_tb(sys.exc_info()[2])
@@ -371,6 +374,15 @@ class NodeVar:
             for scope in self.scopes:
                 scope['expanded'] = self.prev_scopes[index]['expanded']
                 index = index + 1
+        return
+
+    def restore_prev_scopes(self):
+        """ 退避していた scopes を戻す. 
+
+        本来必要ない処理だが、scope が存在しないエラーからのリカバリー用.
+        """
+        self.scopes = self.prev_scopes
+
         return
 
     def move_properties_array_to_ordered_dict(self, array_p, dict_p):
@@ -691,14 +703,28 @@ class NodeDbg(debugger.Debugger):
                     if self.varobj.is_standby() == False:
                         self.update_dbgvarbuf(self.varobj.__str__, True)
                 elif item['type'] == 'frame':
-                    self.varobj.set_scopes(item['scopes'])
+                    if 'scopes' in item:
+                        self.varobj.set_scopes(item['scopes'])
+                    else:
+                        # FIXME: frame が存在しない'No framse)というエラーの対応.
+                        # エラーが発生しないようにできないか?
+                        self.inferior.frame();
                 elif item['type'] == 'scope':
-                    self.varobj.set_scope_props(item['body']['index'], \
-                        item['body']['object']['properties']);
-                    if self.varobj.is_standby() == False:
-                        handles = self.varobj.get_lookup_list()
-                        self.inferior.lookup(handles)
-                        self.update_dbgvarbuf(self.varobj.__str__, True)
+                    if 'body' in item:
+                        self.varobj.set_scope_props(item['body']['index'], \
+                            item['body']['object']['properties']);
+                        if self.varobj.is_standby() == False:
+                            handles = self.varobj.get_lookup_list()
+                            self.inferior.lookup(handles)
+                            self.update_dbgvarbuf(self.varobj.__str__, True)
+                    else:
+                        # FIXME: scope が存在しないというエラー対応.
+                        # frame コマンドから取得した scope なので存在しないとい
+                        # うことはないと思うのだが、タイミング依存でなにかあるの
+                        # か?
+                        self.varobj.restore_prev_scopes()
+                        self.inferior.frame();
+
                 elif item['type'] == 'scripts':
                     self._scripts.set_scripts(item['body'])
                     bplist = bps.get_standby_bps(self._scripts)
