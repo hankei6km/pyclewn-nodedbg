@@ -521,31 +521,61 @@ class NodeVar:
 
         return ret
 
-    def scope_var_str(self, properties, depth):
+    def scope_var_str(self, properties, prev_properties, depth):
         varstr = ''
 
         for name in properties:
             var = properties[name]
+            prev_var = {'properties':{}, 'value': {'type':''}}
+            if name in prev_properties:
+                prev_var = prev_properties[name]
             name = var['name']
             value = self.get_value_lbl(var)
-            hilite = '-'
+            hilite = '='
+            if 'value' in var['value']:
+                if 'value' in prev_var['value']:
+                    if var['value']['value'] != prev_var['value']['value']:
+                        hilite = '*'
+                else:
+                    hilite = '*'
+            else:
+                if not 'value' in prev_var['value']:
+                    if var['value']['type'] != prev_var['value']['type']:
+                        hilite = '*'
+                else:
+                    hilite = '*'
             tgl_lbl = self.get_tgl_lbl(var)
             varstr += ' ' * depth + '%s %s ={%s} %s\n' % (tgl_lbl, name, hilite, value)
             if 'expanded' in var and var['expanded']:
                 varstr = varstr + \
-                        self.scope_var_str(var['properties'], depth + 1)
+                        self.scope_var_str( \
+                                var['properties'], \
+                                prev_var['properties'], \
+                                depth + 1 \
+                                )
 
         return varstr
 
     def __str__(self):
         varstr = ''
 
+        index = 0
         for scope in self.scopes:
+            prev_scope = {'properties':{}}
+            if len(self.prev_scopes) > index:
+                prev_scope = self.prev_scopes[index]
+
             tgl_lbl = self.get_tgl_lbl(scope)
             if tgl_lbl:
                 varstr = varstr + '%s %s\n' % (tgl_lbl, scope['lbl'])
                 if scope['expanded']:
-                    varstr = varstr + self.scope_var_str(scope['properties'], 1)
+                    varstr = varstr + \
+                            self.scope_var_str( \
+                                    scope['properties'], \
+                                    prev_scope['properties'], \
+                                    1 \
+                                    )
+            index = index + 1
 
         self.dirty = False
 
@@ -898,7 +928,6 @@ class NodeDbg(debugger.Debugger):
         unused = args
         assert self.inferior is not None
         self.inferior.step()
-        self.move_frame(False)
         self.print_prompt()
 
     def cmd_stepin(self, *args):
@@ -906,7 +935,6 @@ class NodeDbg(debugger.Debugger):
         unused = args
         assert self.inferior is not None
         self.inferior.stepin()
-        self.move_frame(False)
         self.print_prompt()
 
     def cmd_stepout(self, *args):
@@ -914,7 +942,6 @@ class NodeDbg(debugger.Debugger):
         unused = args
         assert self.inferior is not None
         self.inferior.stepout()
-        self.move_frame(False)
         self.print_prompt()
 
     def cmd_continue(self, *args):
