@@ -312,6 +312,8 @@ class NodeVar:
     """ Node var class."""
     def __init__(self):
         """Constructor."""
+        self.dirty = True
+
         self.scopes = []
         self.scope_lookup = {}
 
@@ -374,6 +376,9 @@ class NodeVar:
             for scope in self.scopes:
                 scope['expanded'] = self.prev_scopes[index]['expanded']
                 index = index + 1
+
+        self.dirty = True
+
         return
 
     def restore_prev_scopes(self):
@@ -443,6 +448,8 @@ class NodeVar:
 
         self.scopes[index]['standby'] = False;
 
+        self.dirty = True
+
         return
 
     def get_lookup_list(self):
@@ -478,6 +485,8 @@ class NodeVar:
         self.move_properties_array_to_ordered_dict(properties, \
                 tgt['properties']
                 )
+
+        self.dirty = True
 
         return
 
@@ -538,11 +547,16 @@ class NodeVar:
                 if scope['expanded']:
                     varstr = varstr + self.scope_var_str(scope['properties'], 1)
 
+        self.dirty = False
+
         return varstr
 
-    def get_tgt_item_from_names(self, index, name):
+    def get_tgt_item_from_names(self, index, name, type='scopes'):
 
-        ret = self.scopes[index]
+        if type =='scopes':
+            ret = self.scopes[index]
+        else:
+            ret = self.prev_scopes[index]
 
         for n in name:
             if n in ret['properties']:
@@ -701,7 +715,8 @@ class NodeDbg(debugger.Debugger):
                 elif item['type'] == 'properties':
                     self.varobj.set_properties_from_handle(item['handle'], item['properties'])
                     if self.varobj.is_standby() == False:
-                        self.update_dbgvarbuf(self.varobj.__str__, True)
+                        self.update_dbgvarbuf(self.varobj.__str__,
+                                self.varobj.dirty)
                 elif item['type'] == 'frame':
                     if 'scopes' in item:
                         self.varobj.set_scopes(item['scopes'])
@@ -716,7 +731,8 @@ class NodeDbg(debugger.Debugger):
                         if self.varobj.is_standby() == False:
                             handles = self.varobj.get_lookup_list()
                             self.inferior.lookup(handles)
-                            self.update_dbgvarbuf(self.varobj.__str__, True)
+                            self.update_dbgvarbuf(self.varobj.__str__,
+                                    self.varobj.dirty)
                     else:
                         # FIXME: scope が存在しないというエラー対応.
                         # frame コマンドから取得した scope なので存在しないとい
