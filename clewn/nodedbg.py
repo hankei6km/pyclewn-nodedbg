@@ -292,6 +292,8 @@ class NodeTarget(threading.Thread):
                         self.bp_que.put(item)
                         for scope in data['body']['scopes']:
                             self.scope(scope['index'])
+                    else:
+                        self.bp_que.put(item)
                 elif data['command'] == 'scope':
                     item = {}
                     item['type'] = 'scope'
@@ -344,6 +346,7 @@ class NodeVar:
             # 前回と異なる scopes の可能性が高いので、
             # 退避していた情報は破棄.
             self.prev_scopes = []
+            self.scope_lookup = OrderedDict()
 
         self.scopes = [0] * len(scopes);
         for scope in scopes:
@@ -459,7 +462,10 @@ class NodeVar:
         # ref が変わっているので、index と name から再取得.
 
         prev_lookup = self.scope_lookup
-        self.scope_lookup = {}
+        # 有効なプロパティのみで作り替えるようにしていたが、
+        # 取得順番やエラーなどで一時的に存在しな場合もあるので、
+        # 無駄が多いが(重複したキーができる)、追加という形態にする.
+        #self.scope_lookup = {}
         for handle in prev_lookup:
             tgt = self.get_tgt_item_from_names( \
                     prev_lookup[handle]['index'], \
@@ -475,6 +481,8 @@ class NodeVar:
         return ret
 
     def set_properties_from_handle(self, handle, properties):
+        """ handle から対応する対象を取得し、
+        properties(handle からlookupしたオブジェクトのもの)をセットする"""
 
         tgt = self.get_tgt_item_from_names( \
                 self.scope_lookup[handle]['index'],\
@@ -485,6 +493,21 @@ class NodeVar:
         self.move_properties_array_to_ordered_dict(properties, \
                 tgt['properties']
                 )
+
+        # 前回に同じオブジェクトがあった場合、展開状態を反映させる.
+        prev_tgt = self.get_tgt_item_from_names( \
+                self.scope_lookup[handle]['index'],\
+                self.scope_lookup[handle]['name'],
+                'prev_scopes'
+                )
+        if 'properties' in prev_tgt:
+            for prop in tgt['properties']:
+                if prop in prev_tgt['properties']:
+                    if 'expanded' in prev_tgt['properties'][prop]:
+                        tgt['properties'][prop]['properties'] = \
+                            prev_tgt['properties'][prop]['properties']
+                        tgt['properties'][prop]['expanded'] = \
+                            prev_tgt['properties'][prop]['expanded']
 
         self.dirty = True
 
@@ -583,13 +606,16 @@ class NodeVar:
 
     def get_tgt_item_from_names(self, index, name, type='scopes'):
 
+        ret = {}
+
         if type =='scopes':
             ret = self.scopes[index]
         else:
-            ret = self.prev_scopes[index]
+            if len(self.prev_scopes) > index:
+                ret = self.prev_scopes[index]
 
         for n in name:
-            if n in ret['properties']:
+            if'properties' in ret and  n in ret['properties']:
                 ret = ret['properties'][n]
             else:
                 ret = {}
