@@ -33,10 +33,9 @@ Pyclewn は **Python3 用** が必要ですので注意してください.
     :Cbreak foo.js:5
     :Ccontinue
 
-変数 `bar` の表示と変更.
+変数 `bar` の表示.
 
     :Cprint bar
-    :Cprint bar=10
 
 `<C-B>` による breakpoint セットや `<S-C>` による continue 等のキーマップ有効化.
 
