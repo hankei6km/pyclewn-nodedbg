@@ -315,7 +315,7 @@ class NodeVar:
         self.dirty = True
 
         self.scopes = []
-        self.scope_lookup = {}
+        self.scope_lookup = OrderedDict()
 
         self.prev_scopes = []
 
